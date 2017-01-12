@@ -1,0 +1,84 @@
+From 80eba9bc4c92cabbf2480845ba9d053c2160ee85 Mon Sep 17 00:00:00 2001
+From: Dwayne Litzenberger <dlitz@dlitz.net>
+Date: Wed, 11 Jan 2017 03:34:40 -0800
+Subject: [PATCH 1/2] xen-pciback: Fix error return in bar_write() and
+ rom_write()
+
+Signed-off-by: Dwayne Litzenberger <dlitz@dlitz.net>
+---
+ drivers/xen/xen-pciback/conf_space_header.c | 24 ++++++++++++++++++------
+ 1 file changed, 18 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/xen/xen-pciback/conf_space_header.c b/drivers/xen/xen-pciback/conf_space_header.c
+index 5fbfd9c..153c91d 100644
+--- a/drivers/xen/xen-pciback/conf_space_header.c
++++ b/drivers/xen/xen-pciback/conf_space_header.c
+@@ -134,6 +134,7 @@ static int command_write(struct pci_dev *dev, int offset, u16 value, void *data)
+ 
+ static int rom_write(struct pci_dev *dev, int offset, u32 value, void *data)
+ {
++	int err = 0;
+ 	struct pci_bar_info *bar = data;
+ 
+ 	if (unlikely(!bar)) {
+@@ -149,17 +150,22 @@ static int rom_write(struct pci_dev *dev, int offset, u32 value, void *data)
+ 		bar->which = 1;
+ 	else {
+ 		u32 tmpval;
+-		pci_read_config_dword(dev, offset, &tmpval);
++		err = pci_read_config_dword(dev, offset, &tmpval);
++		if (err)
++			goto out;
+ 		if (tmpval != bar->val && value == bar->val) {
+ 			/* Allow restoration of bar value. */
+-			pci_write_config_dword(dev, offset, bar->val);
++			err = pci_write_config_dword(dev, offset, bar->val);
++			if (err)
++				goto out;
+ 		}
+ 		bar->which = 0;
+ 	}
+ 
+ 	/* Do we need to support enabling/disabling the rom address here? */
+ 
+-	return 0;
++out:
++	return err;
+ }
+ 
+ /* For the BARs, only allow writes which write ~0 or
+@@ -168,6 +174,7 @@ static int rom_write(struct pci_dev *dev, int offset, u32 value, void *data)
+  */
+ static int bar_write(struct pci_dev *dev, int offset, u32 value, void *data)
+ {
++	int err = 0;
+ 	struct pci_bar_info *bar = data;
+ 
+ 	if (unlikely(!bar)) {
+@@ -183,15 +190,20 @@ static int bar_write(struct pci_dev *dev, int offset, u32 value, void *data)
+ 		bar->which = 1;
+ 	else {
+ 		u32 tmpval;
+-		pci_read_config_dword(dev, offset, &tmpval);
++		err = pci_read_config_dword(dev, offset, &tmpval);
++		if (err)
++			goto out;
+ 		if (tmpval != bar->val && value == bar->val) {
+ 			/* Allow restoration of bar value. */
+-			pci_write_config_dword(dev, offset, bar->val);
++			err = pci_write_config_dword(dev, offset, bar->val);
++			if (err)
++				goto out;
+ 		}
+ 		bar->which = 0;
+ 	}
+ 
+-	return 0;
++out:
++	return err;
+ }
+ 
+ static int bar_read(struct pci_dev *dev, int offset, u32 * value, void *data)
+-- 
+2.7.4
+
