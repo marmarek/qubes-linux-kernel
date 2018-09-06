@@ -1,0 +1,100 @@
+From fe736018fbe108186226bac3af33dc76d755c1b7 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Marczykowski-G=C3=B3recki?=
+ <marmarek@invisiblethingslab.com>
+Date: Thu, 6 Sep 2018 15:09:44 +0200
+Subject: [PATCH] xen/balloon: add runtime control for scrubbing ballooned out
+ pages
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+Organization: Invisible Things Lab
+Cc: Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>
+
+Scrubbing pages on initial balloon down can take some time, especially
+in nested virtualization case (nested EPT is slow). When HVM/PVH guest is
+started with memory= significantly lower than maxmem=, all the extra
+pages will be scrubbed before returning to Xen. But since most of them
+weren't used at all at that point, Xen needs to populate them first
+(from populate-on-demand pool). In nested virt case (Xen inside KVM)
+this slows down the guest boot by 15-30s with just 1.5GB needed to be
+returned to Xen.
+
+Add runtime parameter to enable/disable it, to allow initially disabling
+scrubbing, then enable it back during boot (for example in initramfs).
+Such usage relies on assumption that a) most pages ballooned out during
+initial boot weren't used at all, and b) even if they were, very few
+secrets are in the guest at that time (before any serious userspace
+kicks in).
+
+Default behaviour is unchanged.
+
+Signed-off-by: Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>
+
+---
+ drivers/xen/Kconfig           |  5 ++++-
+ drivers/xen/mem-reservation.c |  7 +++++++
+ include/xen/mem-reservation.h | 11 ++++++++---
+ 3 files changed, 19 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/xen/Kconfig b/drivers/xen/Kconfig
+index b459edfacff3..7b2c771e1813 100644
+--- a/drivers/xen/Kconfig
++++ b/drivers/xen/Kconfig
+@@ -87,7 +87,10 @@ config XEN_SCRUB_PAGES
+ 	  Scrub pages before returning them to the system for reuse by
+ 	  other domains.  This makes sure that any confidential data
+ 	  is not accidentally visible to other domains.  Is it more
+-	  secure, but slightly less efficient.
++	  secure, but slightly less efficient. It can be disabled with
++	  mem_reservation.xen_scrub_pages=0 and also controlled at runtime with
++	  /sys/module/mem_reservation/parameters/xen_scrub_pages.
++
+ 	  If in doubt, say yes.
+ 
+ config XEN_DEV_EVTCHN
+diff --git a/drivers/xen/mem-reservation.c b/drivers/xen/mem-reservation.c
+index 084799c6180e..5f08e19b6139 100644
+--- a/drivers/xen/mem-reservation.c
++++ b/drivers/xen/mem-reservation.c
+@@ -14,6 +14,13 @@
+ 
+ #include <xen/interface/memory.h>
+ #include <xen/mem-reservation.h>
++#include <linux/moduleparam.h>
++
++#ifdef CONFIG_XEN_SCRUB_PAGES
++bool __read_mostly xen_scrub_pages = true;
++module_param(xen_scrub_pages, bool, 0644);
++MODULE_PARM_DESC(xen_scrub_pages, "Scrub ballooned pages before giving them back to Xen");
++#endif
+ 
+ /*
+  * Use one extent per PAGE_SIZE to avoid to break down the page into
+diff --git a/include/xen/mem-reservation.h b/include/xen/mem-reservation.h
+index 80b52b4945e9..70c08f95bc84 100644
+--- a/include/xen/mem-reservation.h
++++ b/include/xen/mem-reservation.h
+@@ -17,12 +17,17 @@
+ 
+ #include <xen/page.h>
+ 
++#ifdef CONFIG_XEN_SCRUB_PAGES
++extern bool xen_scrub_pages;
++
+ static inline void xenmem_reservation_scrub_page(struct page *page)
+ {
+-#ifdef CONFIG_XEN_SCRUB_PAGES
+-	clear_highpage(page);
+-#endif
++	if (xen_scrub_pages)
++		clear_highpage(page);
+ }
++#else
++static inline void xenmem_reservation_scrub_page(struct page *page) { }
++#endif
+ 
+ #ifdef CONFIG_XEN_HAVE_PVMMU
+ void __xenmem_reservation_va_mapping_update(unsigned long count,
+-- 
+2.17.1
+

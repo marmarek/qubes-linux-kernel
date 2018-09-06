@@ -1,0 +1,91 @@
+From 814031eef0417847271fcc933fdd6e82fb4c23ff Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Marczykowski-G=C3=B3recki?=
+ <marmarek@invisiblethingslab.com>
+Date: Thu, 6 Sep 2018 15:09:44 +0200
+Subject: [PATCH] xen/balloon: add runtime control for scrubbing ballooned out
+ pages
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+Organization: Invisible Things Lab
+Cc: Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>
+
+Scrubbing pages on initial balloon down can take some time, especially
+in nested virtualization case (nested EPT is slow). When HVM/PVH guest is
+started with memory= significantly lower than maxmem=, all the extra
+pages will be scrubbed before returning to Xen. But since most of them
+weren't used at all at that point, Xen needs to populate them first
+(from populate-on-demand pool). In nested virt case (Xen inside KVM)
+this slows down the guest boot by 15-30s with just 1.5GB needed to be
+returned to Xen.
+
+Add runtime parameter to enable/disable it, to allow initially disabling
+scrubbing, then enable it back during boot (for example in initramfs).
+Such usage relies on assumption that a) most pages ballooned out during
+initial boot weren't used at all, and b) even if they were, very few
+secrets are in the guest at that time (before any serious userspace
+kicks in).
+
+Default behaviour is unchanged.
+
+Signed-off-by: Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>
+
+---
+ drivers/xen/Kconfig   |  5 ++++-
+ drivers/xen/balloon.c | 14 +++++++++++---
+ 2 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/xen/Kconfig b/drivers/xen/Kconfig
+index 30187b86729b..63d6e81ab5f3 100644
+--- a/drivers/xen/Kconfig
++++ b/drivers/xen/Kconfig
+@@ -87,7 +87,10 @@ config XEN_SCRUB_PAGES
+ 	  Scrub pages before returning them to the system for reuse by
+ 	  other domains.  This makes sure that any confidential data
+ 	  is not accidentally visible to other domains.  Is it more
+-	  secure, but slightly less efficient.
++	  secure, but slightly less efficient. It can be disabled with
++	  balloon.xen_scrub_pages=0 and also controlled at runtime with
++	  /sys/module/baloon/parameters/xen_scrub_pages.
++
+ 	  If in doubt, say yes.
+ 
+ config XEN_DEV_EVTCHN
+diff --git a/drivers/xen/balloon.c b/drivers/xen/balloon.c
+index 065f0b607373..1f35aee3ce02 100644
+--- a/drivers/xen/balloon.c
++++ b/drivers/xen/balloon.c
+@@ -56,6 +56,7 @@
+ #include <linux/percpu-defs.h>
+ #include <linux/slab.h>
+ #include <linux/sysctl.h>
++#include <linux/moduleparam.h>
+ 
+ #include <asm/page.h>
+ #include <asm/pgalloc.h>
+@@ -157,12 +158,19 @@ static DECLARE_DELAYED_WORK(balloon_worker, balloon_process);
+ #define GFP_BALLOON \
+ 	(GFP_HIGHUSER | __GFP_NOWARN | __GFP_NORETRY | __GFP_NOMEMALLOC)
+ 
++#ifdef CONFIG_XEN_SCRUB_PAGES
++bool __read_mostly xen_scrub_pages = true;
++module_param(xen_scrub_pages, bool, 0644);
++MODULE_PARM_DESC(xen_scrub_pages, "Scrub ballooned pages before giving them back to Xen");
++
+ static void scrub_page(struct page *page)
+ {
+-#ifdef CONFIG_XEN_SCRUB_PAGES
+-	clear_highpage(page);
+-#endif
++	if (xen_scrub_pages)
++		clear_highpage(page);
+ }
++#else
++static void scrub_page(struct page *page) { }
++#endif
+ 
+ /* balloon_append: add the given page to the balloon. */
+ static void __balloon_append(struct page *page)
+-- 
+2.17.1
+
