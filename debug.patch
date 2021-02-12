@@ -1,0 +1,16 @@
+diff --git a/arch/x86/xen/p2m.c b/arch/x86/xen/p2m.c
+index 3301875dd196..ccad8c451629 100644
+--- a/arch/x86/xen/p2m.c
++++ b/arch/x86/xen/p2m.c
+@@ -653,7 +653,10 @@ bool __set_phys_to_machine(unsigned long pfn, unsigned long mfn)
+ 	unsigned int level;
+ 
+ 	if (unlikely(pfn >= xen_p2m_size)) {
+-		BUG_ON(mfn != INVALID_P2M_ENTRY);
++		if (mfn != INVALID_P2M_ENTRY) {
++			printk("__set_phys_to_machine() err: pfn=%lx, mfn=%lx, xen_p2m_size=%lx\n", pfn, mfn, xen_p2m_size);
++			BUG();
++		}
+ 		return true;
+ 	}
+ 
