@@ -136,6 +136,7 @@ Patch10: 0011-xen-blkfront-make-local-copy-of-response-before-usin.patch
 Patch11: 0012-xen-blkfront-prepare-request-locally-only-then-put-i.patch
 Patch12: 0013-xen-pcifront-pciback-Update-pciif.h-with-err-and-res.patch
 Patch13: xsa365-linux.patch
+Patch14: 0014-xen-fix-p2m-size-in-dom0-for-disabled-memory-hotplug.patch
 
 %description
 Qubes Dom0 kernel.
