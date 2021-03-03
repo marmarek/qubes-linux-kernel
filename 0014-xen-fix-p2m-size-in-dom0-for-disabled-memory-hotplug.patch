@@ -1,7 +1,8 @@
-From 62bc9e61be90eedcf359b6ef2d01aa795d64c133 Mon Sep 17 00:00:00 2001
+From 8ee25585a2444b5a90ac95a9902a085c385a0373 Mon Sep 17 00:00:00 2001
 From: Juergen Gross <jgross@suse.com>
 Date: Wed, 24 Feb 2021 16:03:08 +0100
-Subject: [PATCH] xen: fix p2m size in dom0 for disabled memory hotplug case
+Subject: [PATCH] xen: fix p2m size in dom0 for disabled memory hotplug
+ case
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -22,9 +23,13 @@ order to detect errors early.
 
 While changing a comment, remove some 32-bit leftovers.
 
+This is XSA-369.
+
 Fixes: 9e2369c06c8a18 ("xen: add helpers to allocate unpopulated memory")
 Cc: <stable@vger.kernel.org> # 5.9
 Reported-by: Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>
+Signed-off-by: Juergen Gross <jgross@suse.com>
+Reviewed-by: Jan Beulich <jbeulich@suse.com>
 Signed-off-by: Juergen Gross <jgross@suse.com>
 ---
  arch/x86/include/asm/xen/page.h | 12 ++++++++++++
@@ -56,14 +61,14 @@ index 1a162e559753..7068e4bb057d 100644
   * Helper functions to write or read unsigned long values to/from
   * memory, when the access may fault.
 diff --git a/arch/x86/xen/p2m.c b/arch/x86/xen/p2m.c
-index b5949e5a83ec..dd3e5ed11600 100644
+index 9545b8df5315..ed3585eebc4e 100644
 --- a/arch/x86/xen/p2m.c
 +++ b/arch/x86/xen/p2m.c
 @@ -416,6 +416,9 @@ void __init xen_vmalloc_p2m_tree(void)
  	xen_p2m_last_pfn = xen_max_p2m_pfn;
  
  	p2m_limit = (phys_addr_t)P2M_LIMIT * 1024 * 1024 * 1024 / PAGE_SIZE;
-+	if (!p2m_limit && IS_ENABLED(XEN_UNPOPULATED_ALLOC))
++	if (!p2m_limit && IS_ENABLED(CONFIG_XEN_UNPOPULATED_ALLOC))
 +		p2m_limit = xen_start_info->nr_pages * XEN_EXTRA_MEM_RATIO;
 +
  	vm.flags = VM_ALLOC;
