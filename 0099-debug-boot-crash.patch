@@ -1,0 +1,13 @@
+diff --git a/arch/x86/xen/setup.c b/arch/x86/xen/setup.c
+index b3e37961065a..362929255c9e 100644
+--- a/arch/x86/xen/setup.c
++++ b/arch/x86/xen/setup.c
+@@ -38,6 +38,8 @@
+ 
+ #define GB(x) ((uint64_t)(x) * 1024 * 1024 * 1024)
+ 
++RESERVE_BRK(xen_pgt_alloc, 65536);
++
+ /* Amount of extra memory space we add to the e820 ranges */
+ struct xen_memory_region xen_extra_mem[XEN_EXTRA_MEM_MAX_REGIONS] __initdata;
+ 

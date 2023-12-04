@@ -149,6 +149,8 @@ Patch30: 0001-swiotlb-xen-provide-the-max_mapping_size-method.patch
 # S0ix support:
 Patch61: xen-events-Add-wakeup-support-to-xen-pirq.patch
 
+Patch99: 0099-debug-boot-crash.patch
+
 %description
 Qubes Dom0 kernel.
 
